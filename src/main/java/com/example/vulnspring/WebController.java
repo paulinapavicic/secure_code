@@ -43,7 +43,7 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 @Controller
 public class WebController {
 
-	@Autowired
+
 	JdbcTemplate jdbcTemplate;
 
 	private static final Logger logger = LoggerFactory.getLogger(WebController.class);
@@ -63,11 +63,11 @@ public class WebController {
 	public String login(HttpSession session, @RequestParam(name = "username", required = true) String username,
 			@RequestParam(name = "password", required = true) String password, Model model) {
 		if (loginSuccess(username, password)) {
-			logger.debug("Login with: " + username + ":" + password); // Issue - password logged
+			logger.debug("Login with: {}" ,username); // Issue - password logged
 			session.setAttribute("username", username);
 			return "redirect:home";
 		}
-		logger.debug("Failed login for " + username);
+		logger.debug("Failed login for {} " , username);
 		return "login";
 	}
 
@@ -78,10 +78,7 @@ public class WebController {
 		try {
 			String query = "SELECT * FROM users WHERE USERNAME=\"" + username + "\" AND PASSWORD=\"" + password + "\"";
 			Map<String, Object> result = jdbcTemplate.queryForMap(query);
-			if (result.containsKey("username"))
-				return true;
-			else
-				return false;
+            return result.containsKey("username");
 		} catch (EmptyResultDataAccessException e) {
 			return false;
 		}
@@ -96,8 +93,7 @@ public class WebController {
 	@GetMapping("/update")
 	public String update(HttpSession session, Model model) {
 		String statement = "SELECT name FROM users WHERE username=?";
-		Map<String, Object> resultMap = jdbcTemplate.queryForMap(statement,
-				new Object[] { session.getAttribute("username") });
+		Map<String, Object> resultMap = jdbcTemplate.queryForMap(statement, ("username") );
 
 		// Stored XSS
 		model.addAttribute("name", resultMap.get("name"));
@@ -109,7 +105,7 @@ public class WebController {
 		String statement = "UPDATE users SET name = ? WHERE username = ?";
 		int status = jdbcTemplate.update(statement, new Object[] { newName, session.getAttribute("username") });
 		logger.info("Running statement: " + statement + newName + " " + session.getAttribute("username"));
-		logger.info("Result status for transfer is " + String.valueOf(status));
+		logger.info("Result status for transfer is {} " , status);
 
 		if (status == 1) {
 			model.addAttribute("error", "Update Failed!");
@@ -136,8 +132,7 @@ public class WebController {
 	@GetMapping("/transfer")
 	public String transfer(HttpSession session, Model model) {
 		String getBalanceStatement = "SELECT * FROM users WHERE username=?";
-		Map<String, Object> balanceResultMap = jdbcTemplate.queryForMap(getBalanceStatement,
-				new Object[] { session.getAttribute("username") });
+		Map<String, Object> balanceResultMap = jdbcTemplate.queryForMap(getBalanceStatement, ("username") );
 
 		float balance = (float) balanceResultMap.get("balance");
 		model.addAttribute("balance", balance);
@@ -164,8 +159,7 @@ public class WebController {
 		// Validate To Account
 		String toAccountValidatestatement = "SELECT * FROM users WHERE accountnumber=?";
 		try {
-			Map<String, Object> toAccountResultMap = jdbcTemplate.queryForMap(toAccountValidatestatement,
-					new Object[] { toAccount });
+			Map<String, Object> toAccountResultMap = jdbcTemplate.queryForMap(toAccountValidatestatement, (toAccount ));
 			toAccountBalance = (Float) toAccountResultMap.get("balance");
 		} catch (EmptyResultDataAccessException e) {
 			model.addAttribute("error", "Invalid To Account");
@@ -175,12 +169,11 @@ public class WebController {
 
 		// Ensure sufficient balance is available
 		String fromAccountStatement = "SELECT * FROM users WHERE username=?";
-		Map<String, Object> fromResultMap = jdbcTemplate.queryForMap(fromAccountStatement,
-				new Object[] { session.getAttribute("username") });
+		Map<String, Object> fromResultMap = jdbcTemplate.queryForMap(fromAccountStatement, ("username") );
 
 		fromAccountBalance = (float) fromResultMap.get("balance");
 		fromAccount = (String) fromResultMap.get("accountnumber");
-		logger.info("got balance = " + String.valueOf(fromAccountBalance));
+		logger.info("got balance = {}", fromAccountBalance);
 
 		float newBalance = fromAccountBalance - amount;
 		if (newBalance < 0) {
@@ -193,15 +186,15 @@ public class WebController {
 		String toAccStatement = "UPDATE users SET balance = ? WHERE accountnumber = ?";
 		int toAccStatus = jdbcTemplate.update(toAccStatement, new Object[] { toAccountBalance + amount, toAccount });
 		logger.info(
-				"Running statement: " + toAccStatement + String.valueOf(toAccountBalance + amount) + " " + toAccount);
-		logger.info("Result status for transfer is " + String.valueOf(toAccStatus));
+				"Running statement: {}" , toAccStatement );
+		logger.info("Result status for transfer is {} " , toAccStatus);
 
 		String fromAccStatement = "UPDATE users SET balance = ? WHERE accountnumber = ?";
 		int fromAccStatus = jdbcTemplate.update(toAccStatement,
 				new Object[] { fromAccountBalance - amount, fromAccount });
 		logger.info("Running statement: " + fromAccStatement + String.valueOf(fromAccountBalance - amount) + " "
 				+ fromAccount);
-		logger.info("Result status for transfer is " + String.valueOf(fromAccStatus));
+		logger.info("Result status for transfer is {}" , fromAccStatus);
 
 		if (toAccStatus == 1 && fromAccStatus == 1) {
 			model.addAttribute("balance", newBalance);
@@ -274,7 +267,7 @@ public class WebController {
 		// Issue - JWT - Insecure Implementation
 		Algorithm algorithmNone = Algorithm.none();
 		String token = JWT.create().withIssuer("vulnspring").withClaim("username", username).sign(algorithmNone);
-		logger.debug("Generated Token: " + token);
+		logger.debug("Generated Token: {}", token);
 		model.addAttribute("generatedtoken", token);
 		return "token";
 	}
@@ -316,14 +309,11 @@ public class WebController {
 			AddressDetails addressDetails = (AddressDetails) ois.readObject();
 			ois.close();
 			model.addAttribute("decodedAddress", addressDetails);
-		} catch (IOException e) {
-			e.printStackTrace();
-			model.addAttribute("decodedAddress", "Error: Something went wrong with deserialization!");
-		} catch (ClassNotFoundException e) {
+		} catch (IOException | ClassNotFoundException e) {
 			e.printStackTrace();
 			model.addAttribute("decodedAddress", "Error: Something went wrong with deserialization!");
 		}
-		return "address";
+        return "address";
 	}
 
 }
