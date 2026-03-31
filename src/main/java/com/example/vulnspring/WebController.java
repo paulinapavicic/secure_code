@@ -43,7 +43,7 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 @Controller
 public class WebController {
 
-
+	@Autowired
 	JdbcTemplate jdbcTemplate;
 
 	private static final Logger logger = LoggerFactory.getLogger(WebController.class);
