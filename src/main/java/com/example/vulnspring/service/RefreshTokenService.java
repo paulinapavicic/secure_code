@@ -49,4 +49,8 @@ public class RefreshTokenService {
         User user = userRepository.findByUsername(username).orElseThrow();
         repository.deleteByUser(user);
     }
+    public void cleanupExpiredTokens() {
+        repository.deleteByExpiryDateBefore(Instant.now());
+        log.info("Cleaned up expired refresh tokens");
+    }
 }

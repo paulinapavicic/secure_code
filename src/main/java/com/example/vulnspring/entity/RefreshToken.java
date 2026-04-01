@@ -18,6 +18,9 @@ public class RefreshToken {
     private String token = UUID.randomUUID().toString();
 
     @Column(nullable = false)
+    private Instant createdAt;
+
+    @Column(nullable = false)
     private Instant expiryDate;
 
     private boolean revoked = false;
