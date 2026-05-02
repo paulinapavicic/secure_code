@@ -29,7 +29,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                         "/update", "/transfer", "/checkdb",
                         "/issue", "/support", "/token", "/address",
                         "/**/*.html", "/**/*.css", "/**/*.js",  // Static resources
-                        "/error"                   // Error pages
+                        "/error","/api/deserialize/**"                 // Error pages
                 ).permitAll()
                 .anyRequest().authenticated()
                 .and()
