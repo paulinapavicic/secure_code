@@ -23,7 +23,7 @@ public class RefreshTokenService {
     private final UserRepository userRepository;
 
     @Value("${app.jwt.refresh-token-expiry:86400}")
-    private long expirySeconds;
+    public long expirySeconds;
 
     public RefreshToken createRefreshToken(String username) {
         User user = userRepository.findByUsername(username).orElseThrow();

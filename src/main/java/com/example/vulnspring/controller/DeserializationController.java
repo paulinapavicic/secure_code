@@ -34,6 +34,10 @@ public class DeserializationController {
         } catch (InvalidClassException ice) {
             String msg = "[SECURITY] Deserialization blocked: " + ice.getMessage();
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(msg);
+        } catch (IllegalArgumentException ex) {
+            // invalid Base64
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body("Invalid payload: " + ex.getMessage());
         } catch (IOException | ClassNotFoundException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body("Invalid payload: " + ex.getMessage());

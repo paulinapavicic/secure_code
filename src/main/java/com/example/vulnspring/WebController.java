@@ -84,6 +84,22 @@ public class WebController {
 		}
 	}
 
+	@PostMapping("/secure/login")
+	public String secureLogin(HttpSession session,
+							  @RequestParam String username,
+							  @RequestParam String password) {
+
+		String sql = "SELECT * FROM users WHERE USERNAME = ? AND PASSWORD = ?";
+		try {
+			Map<String, Object> result =
+					jdbcTemplate.queryForMap(sql, username, password);
+			session.setAttribute("username", username);
+			return "redirect:home";
+		} catch (EmptyResultDataAccessException e) {
+			return "login";
+		}
+	}
+
 	@GetMapping("/logout")
 	public String logout(HttpSession session) {
 		session.invalidate();
@@ -93,13 +109,14 @@ public class WebController {
 	@GetMapping("/update")
 	public String update(HttpSession session, Model model) {
 		String statement = "SELECT name FROM users WHERE username=?";
-		Map<String, Object> resultMap = jdbcTemplate.queryForMap(statement, ("username") );
+		String currentUser = (String) session.getAttribute("username");
 
-		// Stored XSS
+		Map<String, Object> resultMap = jdbcTemplate.queryForMap(statement, currentUser);
+
+		// Stored XSS (still vulnerable until you sanitize/encode later)
 		model.addAttribute("name", resultMap.get("name"));
 		return "update";
 	}
-
 	@PostMapping("/update")
 	public String update(HttpSession session, @RequestParam(name = "newname") String newName, Model model) {
 		String statement = "UPDATE users SET name = ? WHERE username = ?";
@@ -116,11 +133,35 @@ public class WebController {
 	}
 
 	@PostMapping("/checkdb")
-	public String checkDB(@RequestParam(name = "dbpath") String dbpath, Model model)
-			throws MalformedURLException, IOException {
-		// Issue - SSRF
-		String out = new Scanner(new URL(dbpath).openStream(), "UTF-8").useDelimiter("\\A").next();
-		model.addAttribute("dbResponse", out);
+	public String checkDB(@RequestParam(name = "dbpath") String dbpath, Model model) {
+		try {
+			URL url = new URL(dbpath);
+
+			// 1) Allow only http/https
+			String protocol = url.getProtocol();
+			if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol)) {
+				model.addAttribute("dbResponse", "Blocked: only http/https URLs are allowed.");
+				return "checkdb";
+			}
+
+			// 2) Simple host allow-list (replace with hosts you actually want to allow)
+			String host = url.getHost();
+			if (!"example.com".equalsIgnoreCase(host)
+					&& !"www.example.com".equalsIgnoreCase(host)) {
+				model.addAttribute("dbResponse", "Blocked: host is not in allow-list.");
+				return "checkdb";
+			}
+
+			// 3) If checks pass, fetch content
+			String out = new Scanner(url.openStream(), "UTF-8")
+					.useDelimiter("\\A")
+					.next();
+			model.addAttribute("dbResponse", out);
+		} catch (IOException e) {
+			// 4) Safe error handling: no stack trace to user
+			logger.warn("Error fetching URL in /checkdb: {}", e.getMessage());
+			model.addAttribute("dbResponse", "Error: could not fetch the URL.");
+		}
 		return "checkdb";
 	}
 
@@ -132,9 +173,12 @@ public class WebController {
 	@GetMapping("/transfer")
 	public String transfer(HttpSession session, Model model) {
 		String getBalanceStatement = "SELECT * FROM users WHERE username=?";
-		Map<String, Object> balanceResultMap = jdbcTemplate.queryForMap(getBalanceStatement, ("username") );
+		String currentUser = (String) session.getAttribute("username");
+		Map<String, Object> balanceResultMap = jdbcTemplate.queryForMap(getBalanceStatement, currentUser);
 
-		float balance = (float) balanceResultMap.get("balance");
+		java.math.BigDecimal balanceBig = (java.math.BigDecimal) balanceResultMap.get("balance");
+		float balance = balanceBig.floatValue();  // or use double if you prefer
+
 		model.addAttribute("balance", balance);
 		return "transfer";
 	}
@@ -142,12 +186,14 @@ public class WebController {
 	// Issue - CSRF
 	@Transactional
 	@PostMapping("/transfer")
-	public String transfer(HttpSession session, @RequestParam(name = "toaccount") String toAccount,
-			@RequestParam(name = "amount") Float amount, Model model) {
+	public String transfer(HttpSession session,
+						   @RequestParam(name = "toaccount") String toAccount,
+						   @RequestParam(name = "amount") Float amount,
+						   Model model) {
 
 		String fromAccount;
-		Float fromAccountBalance;
-		Float toAccountBalance;
+		java.math.BigDecimal fromAccountBalance;
+		java.math.BigDecimal toAccountBalance;
 
 		// Sanity check for transaction
 		if (amount < 0) {
@@ -159,42 +205,45 @@ public class WebController {
 		// Validate To Account
 		String toAccountValidatestatement = "SELECT * FROM users WHERE accountnumber=?";
 		try {
-			Map<String, Object> toAccountResultMap = jdbcTemplate.queryForMap(toAccountValidatestatement, (toAccount ));
-			toAccountBalance = (Float) toAccountResultMap.get("balance");
+			Map<String, Object> toAccountResultMap =
+					jdbcTemplate.queryForMap(toAccountValidatestatement, toAccount);
+			toAccountBalance = (java.math.BigDecimal) toAccountResultMap.get("balance");
 		} catch (EmptyResultDataAccessException e) {
 			model.addAttribute("error", "Invalid To Account");
 			logger.info("Invalid To Account");
 			return "transfer";
 		}
 
-		// Ensure sufficient balance is available
+		// Ensure sufficient balance is available for current user
+		String currentUser = (String) session.getAttribute("username");
 		String fromAccountStatement = "SELECT * FROM users WHERE username=?";
-		Map<String, Object> fromResultMap = jdbcTemplate.queryForMap(fromAccountStatement, ("username") );
+		Map<String, Object> fromResultMap =
+				jdbcTemplate.queryForMap(fromAccountStatement, currentUser);
 
-		fromAccountBalance = (float) fromResultMap.get("balance");
+		fromAccountBalance = (java.math.BigDecimal) fromResultMap.get("balance");
 		fromAccount = (String) fromResultMap.get("accountnumber");
 		logger.info("got balance = {}", fromAccountBalance);
 
-		float newBalance = fromAccountBalance - amount;
-		if (newBalance < 0) {
+		java.math.BigDecimal amountBig = java.math.BigDecimal.valueOf(amount);
+		java.math.BigDecimal newBalance = fromAccountBalance.subtract(amountBig);
+		if (newBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
 			model.addAttribute("error", "not enough balance");
-			logger.info("Not enought balance");
+			logger.info("Not enough balance");
 			return "transfer";
 		}
 
 		// Perform transaction
 		String toAccStatement = "UPDATE users SET balance = ? WHERE accountnumber = ?";
-		int toAccStatus = jdbcTemplate.update(toAccStatement, new Object[] { toAccountBalance + amount, toAccount });
-		logger.info(
-				"Running statement: {}" , toAccStatement );
-		logger.info("Result status for transfer is {} " , toAccStatus);
+		int toAccStatus = jdbcTemplate.update(
+				toAccStatement,
+				toAccountBalance.add(amountBig),
+				toAccount);
 
 		String fromAccStatement = "UPDATE users SET balance = ? WHERE accountnumber = ?";
-		int fromAccStatus = jdbcTemplate.update(toAccStatement,
-				new Object[] { fromAccountBalance - amount, fromAccount });
-		logger.info("Running statement: " + fromAccStatement + String.valueOf(fromAccountBalance - amount) + " "
-				+ fromAccount);
-		logger.info("Result status for transfer is {}" , fromAccStatus);
+		int fromAccStatus = jdbcTemplate.update(
+				fromAccStatement,
+				newBalance,
+				fromAccount);
 
 		if (toAccStatus == 1 && fromAccStatus == 1) {
 			model.addAttribute("balance", newBalance);
@@ -204,9 +253,7 @@ public class WebController {
 		}
 
 		return "transfer";
-
 	}
-
 	@GetMapping("/issue")
 	public String issue(Model model) {
 		return "issue";
@@ -315,6 +362,56 @@ public class WebController {
 		}
         return "address";
 	}
+
+	@GetMapping("/search")
+	public String search(@RequestParam(name = "q", required = false) String q, Model model) {
+
+		if (q == null || q.isEmpty()) {
+			model.addAttribute("results", null);
+			return "search";
+		}
+
+		// VULNERABLE: SQL injection via string concatenation
+		String sql = "SELECT * FROM users WHERE name LIKE '%" + q + "%'";
+		logger.info("Running vulnerable search SQL: {}", sql);
+
+		try {
+			var results = jdbcTemplate.queryForList(sql);
+			model.addAttribute("results", results);
+		} catch (Exception e) {
+			model.addAttribute("results", null);
+			model.addAttribute("error", "Search failed");
+		}
+
+		model.addAttribute("q", q);
+		return "search";
+	}
+
+	@GetMapping("/secure/search")
+	public String secureSearch(@RequestParam(name = "q", required = false) String q, Model model) {
+
+		if (q == null || q.isEmpty()) {
+			model.addAttribute("results", null);
+			return "search";
+		}
+
+		String sql = "SELECT * FROM users WHERE name LIKE ?";
+		String like = "%" + q + "%";
+
+		logger.info("Running secure search SQL with parameter");
+
+		try {
+			var results = jdbcTemplate.queryForList(sql, like);
+			model.addAttribute("results", results);
+		} catch (Exception e) {
+			model.addAttribute("results", null);
+			model.addAttribute("error", "Search failed");
+		}
+
+		model.addAttribute("q", q);
+		return "search";
+	}
+
 
 }
 

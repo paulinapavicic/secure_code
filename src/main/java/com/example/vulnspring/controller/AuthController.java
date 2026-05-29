@@ -49,11 +49,12 @@ public class AuthController {
 
 
     private boolean isValidLogin(String username, String password) {
+        System.out.println("DEBUG isValidLogin called with: " + username + ", " + password);
         if (username == null || password == null) return false;
 
         try {
             String query = "SELECT * FROM users WHERE USERNAME=\"" + username + "\" AND PASSWORD=\"" + password + "\"";
-            Map<String, Object> result = jdbcTemplate.queryForMap(query);  // Inject JdbcTemplate
+            Map<String, Object> result = jdbcTemplate.queryForMap(query);
             return result.containsKey("username");
         } catch (EmptyResultDataAccessException e) {
             return false;

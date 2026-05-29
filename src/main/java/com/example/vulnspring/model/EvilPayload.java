@@ -13,9 +13,9 @@ public class EvilPayload implements Serializable {
 
 
     private static final String PWD_PATH_WIN   =
-            "C:\\SC\\passwords.txt";
+            "C:\\SC\\password.txt";
     private static final String PWD_PATH_UNIX  =
-            "/tmp/SC/passwords.txt";
+            "/tmp/SC/password.txt";
 
     private Object looselyDefinedThing;
     private String methodName;

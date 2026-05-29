@@ -9,10 +9,11 @@ import java.util.Base64;
 public final class DeserializationUtils {
     public static final String SAFE_FILTER_PATTERN =
             "maxdepth=10;maxarray=500;maxrefs=100;maxbytes=50000;"
-                    + "com.example.vulnspring.deserialization.model.UserProfile;"
-                    + "java.lang.String;java.lang.Long;"
+                    + "com.example.vulnspring.model.UserProfile;"
+                    + "java.lang.Number;"
+                    + "java.lang.Long;"
+                    + "java.lang.String;"
                     + "!*";
-
     private static final ObjectInputFilter SAFE_FILTER =
             ObjectInputFilter.Config.createFilter(SAFE_FILTER_PATTERN);
 

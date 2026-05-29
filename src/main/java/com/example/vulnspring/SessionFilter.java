@@ -26,14 +26,20 @@ public class SessionFilter implements Filter {
 		HttpServletRequest req = (HttpServletRequest) request;
 		HttpServletResponse res = (HttpServletResponse) response;
 		String username = (String) req.getSession().getAttribute("username");
-		
+
 		logger.debug(req.getMethod() + " " + req.getServletPath() + " requested");
-		if (username == null && req.getServletPath().matches("^\\/login$")) {
+
+		String path = req.getServletPath();
+		boolean isPublic =
+				path.matches("^\\/login$") ||
+						path.startsWith("/api/deserialize/") ||
+						path.startsWith("/api/auth/");
+
+		if (username == null && isPublic) {
 			chain.doFilter(req, res);
-		} else if(username != null) {
+		} else if (username != null) {
 			chain.doFilter(req, res);
-		}
-		else {
+		} else {
 			res.sendRedirect("/login");
 		}
 
